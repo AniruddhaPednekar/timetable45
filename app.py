@@ -1,38 +1,47 @@
-from flask import Flask, jsonify, request
 import random
 import copy
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# Define your data
-subjects = [
-    "Deep Learning", 
-    "Big Data Analytics", 
-    "Neural Network and Fuzzy System", 
-    "Blockchain", 
-    "CyberSecurity"
+# Define the data
+classes = [
+    {"type": "course", "name": "DL", "instructor": "RT"},
+    {"type": "lab", "name": "DL LAB", "instructor": "RT"},
+    {"type": "course", "name": "BDA", "instructor": "MG"},
+    {"type": "lab", "name": "BDA LAB", "instructor": "MG"},
+    {"type": "course", "name": "NNFS", "instructor": "SA"},
+    {"type": "lab", "name": "NNFS LAB", "instructor": "SA"},
+    {"type": "course", "name": "BT", "instructor": "AS"},
+    {"type": "lab", "name": "BT LAB", "instructor": "AS"},
+    {"type": "course", "name": "CSL", "instructor": "SC"},
+    {"type": "course", "name": "DS", "instructor": "ST"},
+    {"type": "lab", "name": "DS LAB", "instructor": "ST"},
+    {"type": "course", "name": "PROJECT", "instructor": "SA"},
 ]
-labs = [
-    "Deep Learning Lab", 
-    "Blockchain Lab", 
-    "Neural Network and Fuzzy System Lab", 
-    "Big Data Analytics Lab"
-]
-project_slot = "Major Project"
+
 days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
 
-# Updated time slots to start at 9:15 and end at 5:15
 time_slots = [
-    "9:15-10:15", 
-    "10:15-11:15", 
+    "9:15-10:15",
+    "10:15-11:15",
     "11:15-11:30 (Break)",
-    "11:30-12:30", 
-    "12:30-1:30", 
+    "11:30-12:30",
+    "12:30-1:30",
     "1:30-2:15 (Break)",
-    "2:15-3:15", 
-    "3:15-4:15", 
-    "4:15-5:15"
+    "2:15-3:15",
+    "3:15-4:15",
+    "4:15-5:15",
 ]
+
+# Define class requirements
+COURSE_REQUIREMENTS = {}
+LAB_REQUIREMENTS = {}
+for cls in classes:
+    if cls["type"] == "course":
+        COURSE_REQUIREMENTS[cls["name"]] = 3  # Each course taught 3 times a week
+    elif cls["type"] == "lab":
+        LAB_REQUIREMENTS[cls["name"]] = 1  # Each lab taught once a week
 
 # Define a timetable structure (empty initially)
 def create_empty_timetable():
@@ -41,115 +50,200 @@ def create_empty_timetable():
 # Fitness function to evaluate a timetable
 def fitness(timetable):
     score = 0
-    # Check that breaks are respected
+
+    # Initialize counters
+    course_counter = {cls["name"]: 0 for cls in classes if cls["type"] == "course"}
+    lab_counter = {cls["name"]: 0 for cls in classes if cls["type"] == "lab"}
+
+    # Check breaks are respected
     for day in days:
         if timetable[day][2] != "Break" or timetable[day][5] != "Break":
-            return 0  # Timetable doesn't respect break times
-        
-    # Check that there are no duplicate subjects in a day
+            return 0  # Breaks not respected
+
+    # Check labs: only one lab per day and occupies two consecutive slots
     for day in days:
-        subjects_scheduled = set()
+        lab_slots = []
+        for idx, slot in enumerate(timetable[day]):
+            if "LAB" in slot:
+                lab_slots.append(idx)
+        if len(lab_slots) > 2:
+            return 0  # More than two lab slots in a day
+        if len(lab_slots) == 2:
+            if lab_slots[1] - lab_slots[0] != 1:
+                return 0  # Lab slots are not consecutive
+        elif len(lab_slots) == 1:
+            return 0  # Lab should occupy two slots
+
+    # Check course and lab frequencies and duplicates
+    for day in days:
+        classes_scheduled = set()
         for slot in timetable[day]:
-            if slot != "Break" and slot != "":
-                if slot in subjects_scheduled:
-                    return 0
-                subjects_scheduled.add(slot)
-        
-    # Check that "Major Project" appears exactly 3 times per week
-    major_project_count = sum([timetable[day].count(project_slot) for day in days])
-    if major_project_count != 3:
-        return 0
-    
-    # Check that every subject and lab appears at least once
-    all_subjects = subjects + labs
-    for item in all_subjects:
-        if not any(item in timetable[day] for day in days):
+            if slot == "" or slot == "Break":
+                continue
+            cls_name = slot.split(" - ")[0]
+            cls_type = next(
+                (cls["type"] for cls in classes if cls["name"] == cls_name), None
+            )
+            if cls_type == "course":
+                course_counter[cls_name] += 1
+                if cls_name in classes_scheduled:
+                    return 0  # Duplicate course in the same day
+                classes_scheduled.add(cls_name)
+            elif cls_type == "lab":
+                lab_counter[cls_name] += 1
+
+    # Check if all courses are taught required number of times
+    for course, count in COURSE_REQUIREMENTS.items():
+        if course_counter.get(course, 0) != count:
             return 0
-    
-    # Each valid timetable gains a positive score
+
+    # Check if all labs are taught required number of times
+    for lab, count in LAB_REQUIREMENTS.items():
+        if lab_counter.get(lab, 0) != count:
+            return 0
+
+    # If all constraints are satisfied
     score += 1
     return score
 
 # Generate a random timetable
 def generate_random_timetable():
     timetable = create_empty_timetable()
-    
-    # Fill in the subjects and labs randomly
-    all_classes = subjects + labs
-    for day in days:
-        slots_filled = 0
-        
-        # Add project slots 3 times per week
-        if sum([timetable[d].count(project_slot) for d in days]) < 3 and random.choice([True, False]):
-            project_index = random.randint(0, len(time_slots) - 1)
-            while timetable[day][project_index] != "":
-                project_index = random.randint(0, len(time_slots) - 1)
-            timetable[day][project_index] = project_slot
-            slots_filled += 1
-        
-        # Fill other slots with classes
-        for i in range(len(time_slots)):
-            if timetable[day][i] == "" and time_slots[i] not in ["11:15-11:30 (Break)", "1:30-2:15 (Break)"]:
-                timetable[day][i] = random.choice(all_classes)
-                all_classes.remove(timetable[day][i])
-                if not all_classes:
-                    all_classes = subjects + labs  # Reset subjects/labs pool when exhausted
-                
-    # Add the breaks
+
+    # Shuffle courses and labs
+    courses = [cls for cls in classes if cls["type"] == "course"]
+    labs = [cls for cls in classes if cls["type"] == "lab"]
+
+    # Schedule labs first
+    for lab in labs:
+        placed = False
+        attempts = 0
+        while not placed and attempts < 100:
+            day = random.choice(days)
+            # Check if lab already scheduled on this day
+            lab_present = any("LAB" in slot for slot in timetable[day])
+            if lab_present:
+                attempts += 1
+                continue
+            # Choose a starting slot for 2-hour lab
+            possible_slots = [i for i in range(len(time_slots) - 1) if i not in [2, 5]]
+            random.shuffle(possible_slots)
+            for slot in possible_slots:
+                if timetable[day][slot] == "" and timetable[day][slot + 1] == "":
+                    timetable[day][slot] = f"{lab['name']} - {lab['instructor']}"
+                    timetable[day][slot + 1] = f"{lab['name']} - {lab['instructor']}"
+                    placed = True
+                    break
+            attempts += 1
+
+    # Schedule courses
+    for course in courses:
+        times_scheduled = 0
+        attempts = 0
+        while times_scheduled < COURSE_REQUIREMENTS[course["name"]] and attempts < 100:
+            day = random.choice(days)
+            # Avoid duplicate courses in the same day
+            if any(course["name"] in slot for slot in timetable[day]):
+                attempts += 1
+                continue
+            # Choose a random slot excluding breaks and lab slots
+            possible_slots = [i for i in range(len(time_slots)) if i not in [2, 5]]
+            random.shuffle(possible_slots)
+            for slot in possible_slots:
+                # Check if slot is free and not part of a lab
+                if timetable[day][slot] == "":
+                    # Ensure not overlapping with lab slots
+                    if slot > 0 and "LAB" in timetable[day][slot - 1]:
+                        continue
+                    if slot < len(time_slots) - 1 and "LAB" in timetable[day][slot + 1]:
+                        continue
+                    timetable[day][slot] = f"{course['name']} - {course['instructor']}"
+                    times_scheduled += 1
+                    break
+            attempts += 1
+
+    # Add breaks
     for day in days:
         timetable[day][2] = "Break"
         timetable[day][5] = "Break"
-        
+
     return timetable
 
 # Crossover between two timetables
 def crossover(timetable1, timetable2):
-    new_timetable = copy.deepcopy(timetable1)
+    child = copy.deepcopy(timetable1)
     crossover_day = random.choice(days)
-    new_timetable[crossover_day] = timetable2[crossover_day]
-    return new_timetable
+    child[crossover_day] = copy.deepcopy(timetable2[crossover_day])
+    return child
 
 # Mutation to introduce variability
 def mutate(timetable):
-    day_to_mutate = random.choice(days)
-    time_slot_to_mutate = random.choice(range(len(time_slots)))
-    
-    if time_slots[time_slot_to_mutate] not in ["11:15-11:30 (Break)", "1:30-2:15 (Break)"]:
-        possible_classes = subjects + labs + [project_slot]
-        timetable[day_to_mutate][time_slot_to_mutate] = random.choice(possible_classes)
-    
-    return timetable
+    mutated = copy.deepcopy(timetable)
+    day = random.choice(days)
+    slot = random.choice(range(len(time_slots)))
 
-# Main genetic algorithm function
-def run_genetic_algorithm(data, population_size=20, generations=500):
-    # Create initial population
+    # Skip break slots
+    if slot in [2, 5]:
+        return mutated
+
+    current_class = mutated[day][slot]
+    if current_class == "Break" or current_class == "":
+        return mutated
+
+    cls_name = current_class.split(" - ")[0]
+    cls = next((c for c in classes if c["name"] == cls_name), None)
+    if not cls:
+        return mutated
+
+    if cls["type"] == "course":
+        # Try to replace with another course
+        possible_courses = [
+            c for c in classes if c["type"] == "course" and c["name"] != cls["name"]
+        ]
+        if possible_courses:
+            new_cls = random.choice(possible_courses)
+            mutated[day][slot] = f"{new_cls['name']} - {new_cls['instructor']}"
+    elif cls["type"] == "lab":
+        # Mutate both slots of the lab
+        if slot < len(time_slots) - 1 and mutated[day][slot + 1] == current_class:
+            # Replace with another lab if possible
+            possible_labs = [
+                c for c in classes if c["type"] == "lab" and c["name"] != cls["name"]
+            ]
+            if possible_labs:
+                new_lab = random.choice(possible_labs)
+                mutated[day][slot] = f"{new_lab['name']} - {new_lab['instructor']}"
+                mutated[day][slot + 1] = f"{new_lab['name']} - {new_lab['instructor']}"
+    return mutated
+
+# Run the genetic algorithm
+def run_genetic_algorithm(population_size=50, generations=1000):
     population = [generate_random_timetable() for _ in range(population_size)]
-    
     for generation in range(generations):
+        # Evaluate fitness
         population = sorted(population, key=lambda x: fitness(x), reverse=True)
-        
+
         if fitness(population[0]) == 1:
-            return population[0]  # Found an optimal solution
-        
-        # Selection (top 50% will survive)
-        population = population[:population_size // 2]
-        
-        # Crossover and mutation to create new offspring
-        new_population = []
-        while len(new_population) < population_size:
-            parent1 = random.choice(population)
-            parent2 = random.choice(population)
-            
+            print(f"Optimal timetable found at generation {generation}")
+            return population[0]
+
+        # Selection: top 50%
+        survivors = population[: population_size // 2]
+
+        # Crossover and mutation to create new population
+        children = []
+        while len(children) < population_size - len(survivors):
+            parent1, parent2 = random.sample(survivors, 2)
             child = crossover(parent1, parent2)
             if random.random() < 0.1:  # 10% mutation rate
                 child = mutate(child)
-            
-            new_population.append(child)
-        
-        population = new_population
-        
+            children.append(child)
+
+        population = survivors + children
+
     # Return the best timetable found
-    return sorted(population, key=lambda x: fitness(x), reverse=True)[0]
+    print("Reached maximum generations without finding optimal timetable.")
+    return population[0]
 
 # Flask route to generate the timetable
 @app.route('/generate_timetable', methods=['GET', 'POST'])
@@ -164,13 +258,26 @@ def generate_timetable():
         return jsonify({"error": "No data provided"}), 400
     
     # Pass the data to your genetic algorithm function
-    timetable = run_genetic_algorithm(data)
+    timetable = run_genetic_algorithm()
     
-    # Return the generated timetable as a JSON response
-    return jsonify(timetable), 200
+    # Format the timetable to include time slots
+    formatted_timetable = {}
+    
+    for day in days:
+        formatted_day = []
+        for i in range(len(time_slots)):
+            formatted_day.append({
+                "time_slot": time_slots[i],
+                "subject": timetable[day][i]
+            })
+        formatted_timetable[day] = formatted_day
+    
+    # Return the generated timetable in a structured format
+    return jsonify(formatted_timetable), 200
 
-
-
-# Run the Flask app
+# Running the app if script is executed
 if __name__ == "__main__":
+    print("Generating timetable...")
+    timetable = run_genetic_algorithm()
+    print("Timetable generated successfully!\n")
     app.run(debug=True)
