@@ -6,32 +6,32 @@ app = Flask(__name__)
 
 # Define the data
 classes = [
-    {"type": "course", "name": "DL", "instructor": "RT"},
-    {"type": "lab", "name": "DL LAB", "instructor": "RT"},
-    {"type": "course", "name": "BDA", "instructor": "MG"},
-    {"type": "lab", "name": "BDA LAB", "instructor": "MG"},
-    {"type": "course", "name": "NNFS", "instructor": "SA"},
-    {"type": "lab", "name": "NNFS LAB", "instructor": "SA"},
-    {"type": "course", "name": "BT", "instructor": "AS"},
-    {"type": "lab", "name": "BT LAB", "instructor": "AS"},
-    {"type": "course", "name": "CSL", "instructor": "SC"},
-    {"type": "course", "name": "DS", "instructor": "ST"},
-    {"type": "lab", "name": "DS LAB", "instructor": "ST"},
-    {"type": "course", "name": "PROJECT", "instructor": "SA"},
+    {"type": "course", "name": "DL"},
+    {"type": "lab", "name": "DL LAB"},
+    {"type": "course", "name": "BDA"},
+    {"type": "lab", "name": "BDA LAB"},
+    {"type": "course", "name": "NNFS"},
+    {"type": "lab", "name": "NNFS LAB"},
+    {"type": "course", "name": "BT"},
+    {"type": "lab", "name": "BT LAB"},
+    {"type": "course", "name": "CSL"},
+    {"type": "course", "name": "DS"},
+    {"type": "lab", "name": "DS LAB"},
+    {"type": "course", "name": "PROJECT"},
 ]
 
 days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
 
 time_slots = [
-    "9:15-10:15",
+    "09:15-10:15",
     "10:15-11:15",
     "11:15-11:30 (Break)",
     "11:30-12:30",
-    "12:30-1:30",
-    "1:30-2:15 (Break)",
-    "2:15-3:15",
-    "3:15-4:15",
-    "4:15-5:15",
+    "12:30-13:30",
+    "13:30-14:15 (Break)",
+    "14:15-15:15",
+    "15:15-16:15",
+    "16:15-17:15",
 ]
 
 # Define class requirements
@@ -130,8 +130,8 @@ def generate_random_timetable():
             random.shuffle(possible_slots)
             for slot in possible_slots:
                 if timetable[day][slot] == "" and timetable[day][slot + 1] == "":
-                    timetable[day][slot] = f"{lab['name']} - {lab['instructor']}"
-                    timetable[day][slot + 1] = f"{lab['name']} - {lab['instructor']}"
+                    timetable[day][slot] = lab["name"]
+                    timetable[day][slot + 1] = lab["name"]
                     placed = True
                     break
             attempts += 1
@@ -157,7 +157,7 @@ def generate_random_timetable():
                         continue
                     if slot < len(time_slots) - 1 and "LAB" in timetable[day][slot + 1]:
                         continue
-                    timetable[day][slot] = f"{course['name']} - {course['instructor']}"
+                    timetable[day][slot] = course["name"]
                     times_scheduled += 1
                     break
             attempts += 1
@@ -202,7 +202,7 @@ def mutate(timetable):
         ]
         if possible_courses:
             new_cls = random.choice(possible_courses)
-            mutated[day][slot] = f"{new_cls['name']} - {new_cls['instructor']}"
+            mutated[day][slot] = new_cls["name"]
     elif cls["type"] == "lab":
         # Mutate both slots of the lab
         if slot < len(time_slots) - 1 and mutated[day][slot + 1] == current_class:
@@ -212,8 +212,8 @@ def mutate(timetable):
             ]
             if possible_labs:
                 new_lab = random.choice(possible_labs)
-                mutated[day][slot] = f"{new_lab['name']} - {new_lab['instructor']}"
-                mutated[day][slot + 1] = f"{new_lab['name']} - {new_lab['instructor']}"
+                mutated[day][slot] = new_lab["name"]
+                mutated[day][slot + 1] = new_lab["name"]
     return mutated
 
 # Run the genetic algorithm
